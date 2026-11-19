@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block content %}
+<div class="row-between">
+  <h1>Users</h1>
+  <a class="btn" href="{{ url_for('admin.user_new') }}">+ New user</a>
+</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Station</th><th>Manager</th>
+    <th class="num">Weekly target</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td>{{ u.full_name }}</td><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ u.station or '—' }}</td>
+      <td>{{ u.manager_name or '—' }}</td>
+      <td class="num">{{ u.weekly_target_minor | money }}</td>
+      <td>{{ 'Active' if u.is_active else 'Disabled' }}</td>
+      <td class="right"><a href="{{ url_for('admin.user_edit', uid=u.id) }}">Edit</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

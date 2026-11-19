@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}All records{% endblock %}
+{% block content %}
+<h1>All records</h1>
+
+<form method="get" class="filters card">
+  <label>PRN contains <input name="q" value="{{ q }}"></label>
+  <label>User
+    <select name="user">
+      <option value="">Everyone</option>
+      {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if uid == u.id }}>{{ u.full_name }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="btn secondary" type="submit">Filter</button>
+</form>
+
+{{ m.records_table(records, show_user=True) }}
+<div class="pager">
+  {% if page > 1 %}<a href="{{ url_for('admin.records', page=page-1, q=q, user=uid) }}">← Newer</a>{% endif %}
+  {% if has_next %}<a href="{{ url_for('admin.records', page=page+1, q=q, user=uid) }}">Older →</a>{% endif %}
+</div>
+
+<h2>Add on behalf of a user</h2>
+{{ m.record_forms(users=users, selected=form_uid, activity=activity, week_start=activity_week) }}
+{% endblock %}

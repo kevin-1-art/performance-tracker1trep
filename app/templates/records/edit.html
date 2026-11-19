@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Edit application details{% endblock %}
+{% block content %}
+<h1>Edit application details</h1>
+<form method="post" class="card narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <p><strong>PRN:</strong> {{ record.prn }}</p>
+  <p><strong>Date:</strong> {{ record.date_of_application }} · <strong>NTR:</strong> {{ record.amount_minor | money }} {{ currency }}</p>
+  <label>Document number
+    <input name="doc_no" value="{{ request.form.get('doc_no', record.doc_no) }}" required>
+  </label>
+  <label>Document type
+    <select name="doc_type" required>
+      {% for doc_type in registration_types %}
+        <option value="{{ doc_type }}" {{ 'selected' if request.form.get('doc_type', record.doc_type) == doc_type }}>{{ doc_type }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Document name / entity name
+    <input name="entity_name" value="{{ request.form.get('entity_name', record.entity_name) }}" required>
+  </label>
+  <label>Registration number
+    <input name="reg_no" value="{{ request.form.get('reg_no', record.reg_no) }}" required>
+  </label>
+  <button class="btn" type="submit">Save details</button>
+  <a href="{{ url_for('admin.records') if g.user.role == 'admin' else url_for('records.mine') }}">Cancel</a>
+</form>
+{% endblock %}

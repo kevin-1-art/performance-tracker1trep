@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Weekly report{% endblock %}
+{% block content %}
+<div class="row-between">
+  <h1>TREP weekly report</h1>
+</div>
+<form method="get" class="filters card">
+  {% if g.user.role in ['admin', 'manager'] %}
+  <label>Report for
+    <select name="user_id">
+      <option value="">{{ 'Everyone' if g.user.role == 'admin' else 'My team' }}</option>
+      {% for u in users %}
+        <option value="{{ u.id }}" {{ 'selected' if target_user_id == u.id }}>{{ u.full_name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% elif target_user_id %}
+  <input type="hidden" name="user_id" value="{{ target_user_id }}">
+  {% endif %}
+  <label>From date <input type="date" name="from_date" value="{{ from_date }}"></label>
+  <label>To date <input type="date" name="to_date" value="{{ to_date }}"></label>
+  <button class="btn secondary" type="submit">Show report</button>
+  <p class="muted">Leave both blank for this Friday–Thursday week. Enter only a from date for that whole week, or both dates for a custom period.</p>
+</form>
+<p class="muted">{{ report.week_start }} to {{ report.week_end }}
+  {% if report_user %}· {{ report_user.full_name }}
+  {% elif g.user.role == 'admin' %}· everyone
+  {% elif g.user.role == 'manager' %}· your team
+  {% else %}· you{% endif %}</p>
+
+<div class="card download {{ 'open' if can_download else 'closed' }}">
+  {% if can_download %}
+    <strong>{% if g.user.role == 'admin' %}Download available.{% else %}Download day is open.{% endif %}</strong>
+    Get this report:
+    <a class="btn" href="{{ url_for('reports.download', from_date=period_start.isoformat(), to_date=period_end.isoformat(), user_id=target_user_id, fmt='xlsx') }}">Excel (.xlsx)</a>
+    <a class="btn secondary" href="{{ url_for('reports.download', from_date=period_start.isoformat(), to_date=period_end.isoformat(), user_id=target_user_id, fmt='csv') }}">CSV</a>
+  {% elif g.user.role == 'admin' %}
+    <strong>This reporting period is in the future.</strong> Admin downloads can include dates through today.
+  {% elif not completed %}
+    <strong>This reporting period is still in progress.</strong> User and manager downloads unlock on Thursday.
+  {% else %}
+    <strong>Downloads are locked.</strong> Weekly reports can only be downloaded on Thursdays.
+    Next download day: <strong>{{ next_download.strftime('%A %d %B %Y') }}</strong>.
+    You can still view the report on this page.
+  {% endif %}
+</div>
+
+{{ m.kpis(report.totals) }}
+
+<div class="card">
+  <h3>Daily totals</h3>
+  {{ m.bars(report.daily, report.max_daily) }}
+</div>
+
+{{ m.leaderboard(report.rows, show_role=(g.user.role != 'user')) }}
+
+{% if can_edit_activity %}
+<form method="post" action="{{ url_for('reports.save_activity') }}" class="card">
+  <h3>Weekly activity</h3>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="week_start" value="{{ period_start.isoformat() }}">
+  {% if g.user.role in ['admin', 'manager'] and target_user_id %}
+  <input type="hidden" name="user_id" value="{{ target_user_id }}">
+  {% endif %}
+  <p class="muted">Registration totals are calculated from saved application records. Enter the activity measures below.</p>
+  <div class="grid-2">
+    {% for field, label in activity_rows %}
+      <label>{{ label }}
+        <input type="number" min="0" step="1" name="{{ field }}" value="{{ activity[field] }}" required>
+      </label>
+    {% endfor %}
+  </div>
+  <button class="btn" type="submit">Save weekly activity</button>
+</form>
+{% endif %}
+{% endblock %}

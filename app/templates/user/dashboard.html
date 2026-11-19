@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}My dashboard{% endblock %}
+{% block content %}
+<h1>Hello, {{ g.user.full_name.split(' ')[0] }}</h1>
+<p class="muted">This week so far: {{ this_week.week_start }} to {{ this_week.week_end }}</p>
+
+{% if me %}
+  {{ m.kpis({'applications': me.applications, 'total_minor': me.total_minor, 'avg_minor': me.avg_minor,
+             'change_pct': me.change_pct, 'achievement_pct': me.achievement_pct}) }}
+  {% if me.achievement_pct is not none %}
+  <div class="progress" title="{{ me.achievement_pct }}% of weekly target">
+    <div class="progress-fill" style="width: {{ [me.achievement_pct, 100] | min }}%"></div>
+  </div>
+  <p class="muted">Weekly target: {{ me.target_minor | money }} {{ currency }}</p>
+  {% endif %}
+{% endif %}
+
+<div class="card">
+  <h3>Daily totals this week</h3>
+  {{ m.bars(this_week.daily, this_week.max_daily) }}
+</div>
+
+<div class="card">
+  <h3>Last week ({{ last_week.week_start }} to {{ last_week.week_end }})</h3>
+  {% if last_me %}
+    <p>{{ last_me.applications }} application(s) · {{ last_me.total_minor | money }} {{ currency }}
+       · rank {{ last_me.rank }}</p>
+  {% endif %}
+  <p class="muted">
+    {% if download_day_open %}Download day is open: <a href="{{ url_for('reports.index') }}">get your weekly report</a>.
+    {% else %}Reports can be downloaded on Thursdays. Next download day: {{ next_download.strftime('%A %d %B') }}.{% endif %}
+  </p>
+</div>
+
+{{ m.record_forms(activity=activity, week_start=activity_week) }}
+
+<h2>My records</h2>
+{{ m.records_table(records) }}
+<div class="pager">
+  {% if page > 1 %}<a href="{{ url_for('records.mine', page=page-1) }}">← Newer</a>{% endif %}
+  {% if has_next %}<a href="{{ url_for('records.mine', page=page+1) }}">Older →</a>{% endif %}
+</div>
+{% endblock %}

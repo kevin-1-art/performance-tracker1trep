@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Dashboard{% endblock %} · Performance Tracker</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="role-{{ g.user.role if g.user else 'guest' }}">
+{% if g.user %}
+<header class="topbar">
+  <div class="brand">Performance Tracker <span class="badge">{{ g.user.role }}</span></div>
+  <nav>
+    {% if g.user.role == 'admin' %}
+      <a href="{{ url_for('admin.overview') }}">Overview</a>
+      <a href="{{ url_for('admin.users') }}">Users</a>
+      <a href="{{ url_for('admin.records') }}">All records</a>
+    {% elif g.user.role == 'manager' %}
+      <a href="{{ url_for('manager.dashboard') }}">Team</a>
+      <a href="{{ url_for('records.mine') }}">My records</a>
+    {% else %}
+      <a href="{{ url_for('records.mine') }}">My dashboard</a>
+    {% endif %}
+    <a href="{{ url_for('reports.index') }}">Weekly report</a>
+    <a href="{{ url_for('auth.password') }}">Password</a>
+  </nav>
+  <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <span class="who">{{ g.user.full_name }}</span>
+    <button class="link" type="submit">Log out</button>
+  </form>
+</header>
+{% endif %}
+<main class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

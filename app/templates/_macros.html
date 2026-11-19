@@ -1,0 +1,157 @@
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endmacro %}
+
+{% macro pct(v) %}{% if v is none %}<span class="muted">n/a</span>{% else %}{{ v }}%{% endif %}{% endmacro %}
+
+{% macro change(v) %}
+  {% if v is none %}<span class="muted">n/a</span>
+  {% elif v >= 0 %}<span class="up">▲ {{ v }}%</span>
+  {% else %}<span class="down">▼ {{ -v }}%</span>{% endif %}
+{% endmacro %}
+
+{% macro kpis(totals) %}
+<div class="kpis">
+  <div class="kpi"><div class="k">Applications</div><div class="v">{{ totals.applications }}</div></div>
+  <div class="kpi"><div class="k">Total amount ({{ currency }})</div><div class="v">{{ totals.total_minor | money }}</div></div>
+  <div class="kpi"><div class="k">Average amount</div><div class="v">{{ totals.avg_minor | money }}</div></div>
+  <div class="kpi"><div class="k">vs previous week</div><div class="v">{{ change(totals.change_pct) }}</div></div>
+  <div class="kpi"><div class="k">Target achieved</div><div class="v">{{ pct(totals.achievement_pct) }}</div></div>
+</div>
+{% endmacro %}
+
+{% macro bars(daily, max_daily) %}
+<div class="bars">
+  {% for d in daily %}
+  <div class="bar-col" title="{{ d.label }}: {{ d.applications }} application(s), {{ d.total_minor | money }}">
+    <div class="bar-track"><div class="bar" style="height: {{ (d.total_minor * 100 // max_daily) }}%"></div></div>
+    <div class="bar-label">{{ d.label }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro leaderboard(rows, show_role=False) %}
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th>#</th><th>Name</th>{% if show_role %}<th>Role</th>{% endif %}
+    <th class="num">Applications</th><th class="num">Total ({{ currency }})</th>
+    <th class="num">Average</th><th class="num">Active days</th>
+    <th class="num">Target</th><th>Achieved</th><th>vs prev. week</th>
+  </tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td>{{ r.rank }}</td><td>{{ r.name }}</td>{% if show_role %}<td>{{ r.role }}</td>{% endif %}
+      <td class="num">{{ r.applications }}</td><td class="num">{{ r.total_minor | money }}</td>
+      <td class="num">{{ r.avg_minor | money }}</td><td class="num">{{ r.active_days }}</td>
+      <td class="num">{{ r.target_minor | money }}</td>
+      <td>{{ pct(r.achievement_pct) }}</td><td>{{ change(r.change_pct) }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="10" class="muted">No data for this period.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endmacro %}
+
+{% macro records_table(records, show_user=False, can_delete=True) %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Doc no.</th><th>Doc type</th><th>Entity name</th><th>Reg no.</th>
+    <th>PRN</th><th>Date of application</th><th class="num">NTR ({{ currency }})</th>
+    {% if show_user %}<th>User</th>{% endif %}<th></th></tr></thead>
+  <tbody>
+  {% for r in records %}
+    <tr>
+      <td>{{ r.doc_no }}</td><td>{{ r.doc_type }}</td><td>{{ r.entity_name }}</td><td>{{ r.reg_no }}</td>
+      <td><code>{{ r.prn }}</code></td><td>{{ r.date_of_application }}</td>
+      <td class="num">{{ r.amount_minor | money }}</td>
+      {% if show_user %}<td>{{ r.full_name }}</td>{% endif %}
+      <td class="right">
+        {% if can_delete %}
+        <a href="{{ url_for('records.edit', rid=r.id) }}">Edit</a>
+        <form method="post" action="{{ url_for('records.delete', rid=r.id) }}" class="inline"
+              onsubmit="return confirm('Delete PRN {{ r.prn }}?');">
+          {{ csrf() }}<button class="link danger" type="submit">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="muted">No records yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endmacro %}
+
+{% macro record_forms(users=None, selected=None, activity=None, week_start=None) %}
+<div class="grid-2">
+  <form method="post" action="{{ url_for('records.add') }}" class="card">
+    <h3>Add application</h3>
+    {{ csrf() }}
+    {% if users is not none %}
+    <label>User
+      <select name="user_id" required>
+        {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if selected == u.id }}>{{ u.full_name }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <label>PRN <input name="prn" required minlength="13" maxlength="13" pattern="[0-9]{13}" inputmode="numeric" placeholder="e.g. 2260000000123" autocomplete="off"></label>
+    <label>Document number <input name="doc_no" required></label>
+    <label>Document type
+      <select name="doc_type" required>
+        {% for doc_type in registration_types %}<option value="{{ doc_type }}">{{ doc_type }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Document name / entity name <input name="entity_name" required></label>
+    <label>Registration number <input name="reg_no" required></label>
+    <label>Date of application <input type="date" name="date_of_application" value="{{ today.isoformat() }}" max="{{ today.isoformat() }}" required></label>
+    <label>Amount ({{ currency }}) <input name="amount" inputmode="decimal" required placeholder="e.g. 250000"></label>
+    <button class="btn" type="submit">Save record</button>
+  </form>
+
+  {% if users is none or users %}
+  <form method="post" action="{{ url_for('reports.save_activity') }}" class="card">
+    <h3>Weekly activity</h3>
+    {{ csrf() }}
+    <input type="hidden" name="week_start" value="{{ week_start.isoformat() }}">
+    {% if users is not none %}
+    <input type="hidden" name="return_to" value="admin.records">
+    <label>User
+      <select name="user_id" required>
+        {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if selected == u.id }}>{{ u.full_name }}</option>{% endfor %}
+      </select>
+    </label>
+    {% else %}
+    <input type="hidden" name="return_to" value="records.mine">
+    {% endif %}
+    <p class="muted">Registration totals are calculated from saved application records. Enter the activity measures below.</p>
+    <div class="grid-2">
+      {% for field, label in activity_rows %}
+      <label>{{ label }}
+        <input type="number" min="0" step="1" name="{{ field }}" value="{{ activity[field] }}" required>
+      </label>
+      {% endfor %}
+    </div>
+    <button class="btn secondary" type="submit">Save weekly counts</button>
+  </form>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('records.import_excel') }}" enctype="multipart/form-data" class="card">
+    <h3>Bulk import (Excel)</h3>
+    {{ csrf() }}
+    {% if users is not none %}
+    <label>User
+      <select name="user_id" required>
+        {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if selected == u.id }}>{{ u.full_name }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <p class="muted">First worksheet columns: <code>doc_no, doc_type, entity_name, reg_no, prn, date_of_application, amount</code>. PRNs must be 13 digits; duplicate PRNs are skipped.</p>
+    <input type="file" name="file" accept=".xlsx" required>
+    <button class="btn secondary" type="submit">Import file</button>
+  </form>
+</div>
+{% endmacro %}
