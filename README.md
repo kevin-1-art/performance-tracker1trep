@@ -42,6 +42,18 @@ python run.py          # http://127.0.0.1:5000
 
 Production: `SECRET_KEY=<long random string> SESSION_COOKIE_SECURE=1 gunicorn "run:app" -b 0.0.0.0:8000` behind HTTPS.
 
+## Public deployment (Render)
+
+The repository includes a Render Blueprint configured with a persistent disk for the SQLite database and a generated `SECRET_KEY`. Persistent disks require a paid Render web-service plan and keep this app to a single service instance.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/kevin-1-art/performance-tracker1trep)
+
+After confirming the Blueprint in Render:
+
+1. Wait for the service deployment to finish and copy its `onrender.com` URL from the Render dashboard.
+2. Open the service Shell and run `flask --app run create-user --role admin` to create the first administrator. Do not seed demo accounts on a public deployment.
+3. Share the service URL. The login page is public, but application records require authentication.
+
 ## Admin workflow
 
 1. Log in as admin, open **Users**, create managers.
