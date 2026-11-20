@@ -44,15 +44,13 @@ Production: `SECRET_KEY=<long random string> SESSION_COOKIE_SECURE=1 gunicorn "r
 
 ## Public deployment (Render)
 
-The repository includes a Render Blueprint configured with a persistent disk for the SQLite database and a generated `SECRET_KEY`. Persistent disks require a paid Render web-service plan and keep this app to a single service instance.
+The repository includes a Render Blueprint for a free web service with a generated `SECRET_KEY`. The free service uses an ephemeral filesystem: SQLite data is lost whenever Render spins the service down after inactivity, restarts it, or redeploys it. Free instances can also take about a minute to wake and have limited monthly usage. This is for demos only; do not enter real or important records. Free web services do not provide Shell access.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/kevin-1-art/performance-tracker1trep)
 
-After confirming the Blueprint in Render:
+During Blueprint setup, provide values for `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_FULL_NAME`, and `INITIAL_ADMIN_PASSWORD` in Render's environment settings. Use a unique password of at least 12 characters; never put credentials in the repository. The service creates that admin account when its database is empty, including after a free-tier restart clears the database.
 
-1. Wait for the service deployment to finish and copy its `onrender.com` URL from the Render dashboard.
-2. Open the service Shell and run `flask --app run create-user --role admin` to create the first administrator. Do not seed demo accounts on a public deployment.
-3. Share the service URL. The login page is public, but application records require authentication.
+After the deploy completes, copy the service's `onrender.com` URL from the Render dashboard and share it. The login page is public, but application records require authentication.
 
 ## Admin workflow
 

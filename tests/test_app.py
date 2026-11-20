@@ -92,6 +92,30 @@ def test_existing_database_gets_report_columns(tmp_path):
         ).fetchone()
 
 
+def test_bootstrap_admin_uses_environment_and_is_idempotent(tmp_path, monkeypatch):
+    app = create_app({
+        "TESTING": True,
+        "DATABASE": str(tmp_path / "bootstrap.db"),
+        "CSRF_ENABLED": False,
+    })
+    monkeypatch.setenv("INITIAL_ADMIN_USERNAME", "First.Admin")
+    monkeypatch.setenv("INITIAL_ADMIN_FULL_NAME", "First Admin")
+    monkeypatch.setenv("INITIAL_ADMIN_PASSWORD", "long-unique-password")
+
+    result = app.test_cli_runner().invoke(args=["bootstrap-admin"])
+    assert result.exit_code == 0
+    assert "Created initial admin 'first.admin'." in result.output
+    assert "long-unique-password" not in result.output
+
+    second_result = app.test_cli_runner().invoke(args=["bootstrap-admin"])
+    assert second_result.exit_code == 0
+    assert "An admin account already exists." in second_result.output
+    with app.app_context():
+        admins = get_db().execute(
+            "SELECT COUNT(*) AS n FROM users WHERE role='admin'").fetchone()["n"]
+        assert admins == 1
+
+
 def login(client, username):
     r = client.post("/login", data={"username": username, "password": "Password123!"})
     assert r.status_code == 302

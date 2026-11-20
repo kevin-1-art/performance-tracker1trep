@@ -2,23 +2,23 @@ services:
   - type: web
     name: performance-tracker1trep
     runtime: python
-    plan: starter
+    plan: free
     region: frankfurt
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT --workers 1
+    startCommand: flask --app run bootstrap-admin && gunicorn run:app --bind 0.0.0.0:$PORT --workers 1
     healthCheckPath: /login
-    disk:
-      name: performance-tracker-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.8"
-      - key: DATABASE
-        value: /var/data/tracker.db
       - key: APP_TIMEZONE
         value: Africa/Kampala
       - key: SESSION_COOKIE_SECURE
         value: "1"
       - key: SECRET_KEY
         generateValue: true
+      - key: INITIAL_ADMIN_USERNAME
+        sync: false
+      - key: INITIAL_ADMIN_FULL_NAME
+        sync: false
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false

@@ -19,6 +19,36 @@ def register(app):
         init_db()
         click.echo("Database ready.")
 
+    @app.cli.command("bootstrap-admin")
+    def bootstrap_admin():
+        """Create the first admin from environment variables if the database is empty."""
+        db = get_db()
+        if db.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone():
+            click.echo("An admin account already exists.")
+            return
+        if db.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+            raise click.ClickException(
+                "The database has users but no admin; create an admin manually."
+            )
+
+        username = os.environ.get("INITIAL_ADMIN_USERNAME", "").strip().lower()
+        full_name = os.environ.get("INITIAL_ADMIN_FULL_NAME", "").strip()
+        password = os.environ.get("INITIAL_ADMIN_PASSWORD", "")
+        if not username or not full_name or not password:
+            raise click.ClickException(
+                "Set INITIAL_ADMIN_USERNAME, INITIAL_ADMIN_FULL_NAME, and "
+                "INITIAL_ADMIN_PASSWORD in the service environment."
+            )
+        if len(password) < 12:
+            raise click.ClickException("The initial admin password must be at least 12 characters.")
+
+        db.execute(
+            "INSERT INTO users (username, full_name, password_hash, role) VALUES (?,?,?,'admin')",
+            (username, full_name, generate_password_hash(password)),
+        )
+        db.commit()
+        click.echo(f"Created initial admin '{username}'.")
+
     @app.cli.command("create-user")
     @click.option("--username", prompt=True)
     @click.option("--full-name", prompt=True)
