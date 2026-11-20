@@ -28,12 +28,13 @@
        · rank {{ last_me.rank }}</p>
   {% endif %}
   <p class="muted">
-    {% if download_day_open %}Download day is open: <a href="{{ url_for('reports.index') }}">get your weekly report</a>.
+    {% if report_download_granted %}Your reports can be downloaded any day: <a href="{{ url_for('reports.index') }}">open weekly report</a>.
+    {% elif download_day_open %}Download day is open: <a href="{{ url_for('reports.index') }}">get your weekly report</a>.
     {% else %}Reports can be downloaded on Thursdays. Next download day: {{ next_download.strftime('%A %d %B') }}.{% endif %}
   </p>
 </div>
 
-{{ m.record_forms(activity=activity, week_start=activity_week) }}
+{{ m.record_forms(activity=activity, activity_date=activity_date, week_start=this_week.week_start) }}
 
 <h2>My records</h2>
 {{ m.records_table(records) }}

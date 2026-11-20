@@ -22,5 +22,6 @@
 </div>
 
 <h2>Add on behalf of a user</h2>
-{{ m.record_forms(users=users, selected=form_uid, activity=activity, week_start=activity_week) }}
+{{ m.record_forms(users=users, selected=form_uid, activity=activity, activity_date=activity_date,
+                  week_start=activity_week) }}
 {% endblock %}

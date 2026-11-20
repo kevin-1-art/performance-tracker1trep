@@ -7,7 +7,8 @@ from flask import (Blueprint, Response, abort, current_app, flash, g, redirect,
 from .auth import login_required, roles_required
 from .db import get_db
 from .reporting import (ACTIVITY_ROWS, application_details, build_csv,
-                        build_range_report, build_user_report_xlsx, build_xlsx)
+                        build_range_report, build_user_report_xlsx, build_xlsx,
+                        daily_activity)
 from .utils import is_download_day, next_download_date, parse_date, today, week_start_of
 
 bp = Blueprint("reports", __name__, url_prefix="/reports")
@@ -18,10 +19,14 @@ MIME = {
 }
 
 
-def download_allowed(user) -> bool:
+def download_allowed(user, db=None) -> bool:
     if user["role"] == "admin":
         return True
-    return is_download_day()
+    if is_download_day():
+        return True
+    return bool(db and db.execute(
+        "SELECT 1 FROM report_download_access WHERE user_id = ?", (user["id"],)
+    ).fetchone())
 
 
 def _report_viewer(db):
@@ -79,15 +84,13 @@ def _report_period():
 
 
 def _activity_for_period(db, user_id, start, end):
-    first_week = week_start_of(start).isoformat()
-    last_week = week_start_of(end).isoformat()
     sums = ", ".join(
         f"COALESCE(SUM({field}), 0) AS {field}" for field, _label in ACTIVITY_ROWS
     )
     row = db.execute(
-        f"""SELECT {sums} FROM weekly_activity
-            WHERE user_id = ? AND week_start BETWEEN ? AND ?""",
-        (user_id, first_week, last_week)).fetchone()
+        f"""SELECT {sums} FROM daily_activity
+            WHERE user_id = ? AND activity_date BETWEEN ? AND ?""",
+        (user_id, start.isoformat(), end.isoformat())).fetchone()
     return row
 
 
@@ -100,7 +103,7 @@ def _activity_user_id(db):
     try:
         user_id = int(raw_user_id)
     except ValueError:
-        abort(400, "Choose a valid user for weekly activity.")
+        abort(400, "Choose a valid user for daily activity.")
     scope = ""
     args = [user_id]
     if g.user["role"] == "manager":
@@ -110,7 +113,7 @@ def _activity_user_id(db):
         "SELECT id FROM users WHERE id = ? AND is_active = 1 AND role != 'admin'" + scope,
         args).fetchone()
     if row is None:
-        abort(400, "Choose a valid user for weekly activity.")
+            abort(400, "Choose a valid user for daily activity.")
     return user_id
 
 
@@ -129,16 +132,19 @@ def _activity_return(user_id=None):
 def save_activity():
     db = get_db()
     try:
-        week_start = week_start_of(parse_date(request.form.get("week_start")))
+        activity_date = parse_date(request.form.get("activity_date"))
         counts = {
             field: int(request.form.get(field, "0"))
             for field, _label in ACTIVITY_ROWS
         }
     except (TypeError, ValueError):
-        flash("Enter a valid week and whole-number report counts.", "error")
+        flash("Enter a valid activity date and whole-number report counts.", "error")
         return _activity_return()
     if any(value < 0 for value in counts.values()):
         flash("Report counts cannot be negative.", "error")
+        return _activity_return()
+    if activity_date > today():
+        flash("Activity date cannot be in the future.", "error")
         return _activity_return()
 
     user_id = _activity_user_id(db)
@@ -147,12 +153,12 @@ def save_activity():
     placeholders = ", ".join("?" for _ in fields)
     updates = ", ".join(f"{field} = excluded.{field}" for field in fields)
     db.execute(
-        f"""INSERT INTO weekly_activity (user_id, week_start, {columns})
+        f"""INSERT INTO daily_activity (user_id, activity_date, {columns})
             VALUES (?, ?, {placeholders})
-            ON CONFLICT(user_id, week_start) DO UPDATE SET {updates}""",
-        (user_id, week_start.isoformat(), *(counts[field] for field in fields)))
+            ON CONFLICT(user_id, activity_date) DO UPDATE SET {updates}""",
+        (user_id, activity_date.isoformat(), *(counts[field] for field in fields)))
     db.commit()
-    flash("Weekly activity saved.", "ok")
+    flash(f"Activity for {activity_date:%A %d %B} saved.", "ok")
     return _activity_return(user_id)
 
 
@@ -181,8 +187,20 @@ def index():
     viewer, target_user_id = _report_viewer(db)
     report = build_range_report(db, viewer, period_start, period_end)
     completed = _period_completed(period_end)
-    can_download = download_allowed(g.user) and (
+    can_download = download_allowed(g.user, db) and (
         completed or (g.user["role"] == "admin" and period_start <= today())
+    )
+    download_grant = bool(
+        g.user["role"] != "admin"
+        and db.execute(
+            "SELECT 1 FROM report_download_access WHERE user_id = ?", (g.user["id"],)
+        ).fetchone()
+    )
+    selected_user_download_grant = bool(
+        g.user["role"] == "admin" and target_user_id
+        and db.execute(
+            "SELECT 1 FROM report_download_access WHERE user_id = ?", (target_user_id,)
+        ).fetchone()
     )
     users = []
     if g.user["role"] == "admin":
@@ -195,11 +213,18 @@ def index():
                WHERE is_active = 1 AND (manager_id = ? OR id = ?)
                ORDER BY full_name""", (g.user["id"], g.user["id"])).fetchall()
     personal = _personal_report(g.user, target_user_id)
-    activity = (_activity_for_period(db, viewer["id"], period_start, period_end)
-                if personal else None)
+    activity_date = min(period_end, today())
     activity_week = (
         period_start == week_start_of(period_start)
         and period_end == period_start + timedelta(days=6)
+    )
+    can_edit_activity = (
+        _can_edit_activity(g.user, target_user_id)
+        and personal and activity_week and period_start <= today()
+    )
+    activity = (
+        daily_activity(db, viewer["id"], activity_date)
+        if personal and can_edit_activity else None
     )
     return render_template("reports/index.html", report=report,
                            completed=completed, can_download=can_download,
@@ -209,11 +234,11 @@ def index():
                            period_start=period_start, period_end=period_end,
                            from_date=request.args.get("from_date", ""),
                            to_date=request.args.get("to_date", ""),
-                           activity=activity, activity_week=activity_week,
-                           can_edit_activity=(
-                               _can_edit_activity(g.user, target_user_id)
-                               and personal and activity_week
-                           ),
+                           activity=activity, activity_date=activity_date,
+                           activity_week=activity_week,
+                           can_edit_activity=can_edit_activity,
+                           download_grant=download_grant,
+                           selected_user_download_grant=selected_user_download_grant,
                            activity_rows=ACTIVITY_ROWS,
                            personal_report=personal)
 
@@ -221,7 +246,8 @@ def index():
 @bp.route("/download")
 @login_required
 def download():
-    if not download_allowed(g.user):
+    db = get_db()
+    if not download_allowed(g.user, db):
         abort(403, f"Reports can only be downloaded on {_day_name()}. "
                    f"The next download day is {next_download_date():%A %d %B %Y}.")
     fmt = request.args.get("fmt", "xlsx")
@@ -232,7 +258,6 @@ def download():
         if period_start > today():
             abort(400, "Reports cannot include future dates.")
         period_end = min(period_end, today())
-    db = get_db()
     viewer, target_user_id = _report_viewer(db)
     report = build_range_report(db, viewer, period_start, period_end)
     if not _period_completed(report["week_end"]):

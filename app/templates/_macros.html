@@ -86,7 +86,7 @@
 </div>
 {% endmacro %}
 
-{% macro record_forms(users=None, selected=None, activity=None, week_start=None) %}
+{% macro record_forms(users=None, selected=None, activity=None, activity_date=None, week_start=None) %}
 <div class="grid-2">
   <form method="post" action="{{ url_for('records.add') }}" class="card">
     <h3>Add application</h3>
@@ -114,9 +114,12 @@
 
   {% if users is none or users %}
   <form method="post" action="{{ url_for('reports.save_activity') }}" class="card">
-    <h3>Weekly activity</h3>
+    <h3>Daily activity</h3>
     {{ csrf() }}
-    <input type="hidden" name="week_start" value="{{ week_start.isoformat() }}">
+    <label>Activity date
+      <input type="date" name="activity_date" value="{{ activity_date.isoformat() }}"
+             min="{{ week_start.isoformat() }}" max="{{ today.isoformat() }}" required>
+    </label>
     {% if users is not none %}
     <input type="hidden" name="return_to" value="admin.records">
     <label>User
@@ -127,7 +130,7 @@
     {% else %}
     <input type="hidden" name="return_to" value="records.mine">
     {% endif %}
-    <p class="muted">Registration totals are calculated from saved application records. Enter the activity measures below.</p>
+    <p class="muted">Enter today's activity, or select an earlier date to correct it. Weekly totals are calculated in the report.</p>
     <div class="grid-2">
       {% for field, label in activity_rows %}
       <label>{{ label }}
@@ -135,7 +138,7 @@
       </label>
       {% endfor %}
     </div>
-    <button class="btn secondary" type="submit">Save weekly counts</button>
+    <button class="btn secondary" type="submit">Save daily activity</button>
   </form>
   {% endif %}
 

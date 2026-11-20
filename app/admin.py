@@ -7,7 +7,7 @@ from werkzeug.security import generate_password_hash
 from .auth import roles_required
 from .config import MIN_PASSWORD_LENGTH
 from .db import get_db
-from .reporting import build_report, weekly_activity
+from .reporting import build_report, daily_activity
 from .utils import last_completed_week_start, to_minor, today, week_start_of
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -51,14 +51,16 @@ def records():
     rows = db.execute(sql, args).fetchall()
     users = db.execute("SELECT id, full_name FROM users WHERE is_active = 1 AND role != 'admin' "
                        "ORDER BY full_name").fetchall()
-    activity_week = week_start_of(today())
+    activity_date = today()
+    activity_week = week_start_of(activity_date)
     form_uid = uid if any(user["id"] == uid for user in users) else (
         users[0]["id"] if users else None
     )
-    activity = weekly_activity(db, form_uid, activity_week) if form_uid else {}
+    activity = daily_activity(db, form_uid, activity_date) if form_uid else {}
     return render_template("admin/records.html", records=rows[:per], has_next=len(rows) > per,
                            page=page, users=users, q=q, uid=uid, form_uid=form_uid,
-                           activity=activity, activity_week=activity_week)
+                           activity=activity, activity_date=activity_date,
+                           activity_week=activity_week)
 
 
 # ---------- user management ----------
@@ -149,3 +151,39 @@ def user_edit(uid):
         except sqlite3.IntegrityError:
             flash("That username is already taken.", "error")
     return render_template("admin/user_form.html", u=u, managers=_managers(db))
+
+
+@bp.route("/users/<int:uid>/report-access", methods=("POST",))
+@roles_required("admin")
+def user_report_access(uid):
+    db = get_db()
+    user = db.execute(
+        "SELECT id, full_name FROM users WHERE id = ? AND is_active = 1 AND role != 'admin'",
+        (uid,),
+    ).fetchone()
+    if user is None:
+        abort(404)
+
+    action = request.form.get("action")
+    if action == "grant":
+        db.execute(
+            """INSERT INTO report_download_access (user_id, granted_by)
+               VALUES (?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET
+                   granted_by = excluded.granted_by, granted_at = datetime('now')""",
+            (uid, g.user["id"]),
+        )
+        flash(f"{user['full_name']} can now download reports any day.", "ok")
+    elif action == "revoke":
+        db.execute("DELETE FROM report_download_access WHERE user_id = ?", (uid,))
+        flash(f"Any-day report downloads revoked for {user['full_name']}.", "ok")
+    else:
+        abort(400, "Choose grant or revoke.")
+    db.commit()
+
+    params = {"user_id": uid}
+    for field in ("from_date", "to_date"):
+        value = request.form.get(field, "").strip()
+        if value:
+            params[field] = value
+    return redirect(url_for("reports.index", **params))

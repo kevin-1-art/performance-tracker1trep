@@ -9,7 +9,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from .auth import login_required, roles_required
 from .db import get_db
-from .reporting import REGISTRATION_TYPES, build_report, weekly_activity
+from .reporting import REGISTRATION_TYPES, build_report, daily_activity
 from .utils import last_completed_week_start, today, validate_application, week_start_of
 
 bp = Blueprint("records", __name__)
@@ -80,8 +80,11 @@ def mine():
     db = get_db()
     this_week = build_report(db, g.user, today())
     last_week = build_report(db, g.user, last_completed_week_start(today()))
-    week_start = this_week["week_start"]
-    activity = weekly_activity(db, g.user["id"], week_start)
+    activity_date = today()
+    activity = daily_activity(db, g.user["id"], activity_date)
+    report_download_granted = bool(db.execute(
+        "SELECT 1 FROM report_download_access WHERE user_id = ?", (g.user["id"],)
+    ).fetchone())
     page = max(request.args.get("page", 1, type=int), 1)
     per = 25
     rows = db.execute(
@@ -92,7 +95,8 @@ def mine():
                            me=this_week["rows"][0] if this_week["rows"] else None,
                            last_me=last_week["rows"][0] if last_week["rows"] else None,
                            this_week=this_week, last_week=last_week,
-                           activity=activity, activity_week=week_start,
+                           activity=activity, activity_date=activity_date,
+                           report_download_granted=report_download_granted,
                            records=rows[:per], has_next=len(rows) > per, page=page)
 
 

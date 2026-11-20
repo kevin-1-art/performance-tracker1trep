@@ -116,8 +116,8 @@ def register(app):
         for uid in staff + [m1, m2]:
             for week in weeks:
                 db.execute(
-                    """INSERT INTO weekly_activity
-                       (user_id, week_start, clients_engaged, radio_talk_shows,
+                    """INSERT INTO daily_activity
+                       (user_id, activity_date, clients_engaged, radio_talk_shows,
                         joint_field_operations, obrs_accounts_created)
                        VALUES (?, ?, ?, ?, ?, ?)""",
                     (uid, week.isoformat(), rng.randint(1, 20), rng.randint(0, 3),

@@ -72,6 +72,17 @@ def test_existing_database_gets_report_columns(tmp_path):
             PRIMARY KEY (user_id, week_start)
         );
     """)
+    legacy.execute(
+        """INSERT INTO users (id, username, full_name, password_hash, role)
+           VALUES (1, 'alice', 'Alice', 'hash', 'user')"""
+    )
+    legacy.execute(
+        """INSERT INTO weekly_activity
+           (user_id, week_start, clients_engaged, radio_talk_shows,
+            joint_field_operations, obrs_accounts_created)
+           VALUES (1, '2026-11-13', 8, 2, 1, 4)"""
+    )
+    legacy.commit()
     legacy.close()
     app = create_app({"TESTING": True, "DATABASE": str(database), "CSRF_ENABLED": False})
     with app.app_context():
@@ -89,6 +100,18 @@ def test_existing_database_gets_report_columns(tmp_path):
         } <= activity_columns
         assert db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='weekly_activity'"
+        ).fetchone()
+        assert db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='daily_activity'"
+        ).fetchone()
+        migrated = db.execute(
+            "SELECT * FROM daily_activity WHERE user_id = 1 AND activity_date = '2026-11-13'"
+        ).fetchone()
+        assert migrated["clients_engaged"] == 8
+        assert migrated["radio_talk_shows"] == 2
+        assert db.execute("SELECT COUNT(*) AS n FROM weekly_activity").fetchone()["n"] == 0
+        assert db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='report_download_access'"
         ).fetchone()
 
 
@@ -497,13 +520,14 @@ def test_xlsx_contents_respect_role_scope(app, clock):
             for row in db.execute("SELECT id, username FROM users")
         }
         db.executemany(
-            """INSERT INTO weekly_activity
-               (user_id, week_start, clients_engaged, radio_talk_shows,
+            """INSERT INTO daily_activity
+               (user_id, activity_date, clients_engaged, radio_talk_shows,
                 joint_field_operations, obrs_accounts_created)
-               VALUES (?, '2026-11-06', ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?)""",
             [
-                (users["alice"], 10, 2, 1, 4),
-                (users["bob"], 5, 1, 0, 2),
+                (users["alice"], "2026-11-06", 10, 2, 1, 4),
+                (users["alice"], "2026-11-07", 3, 1, 1, 2),
+                (users["bob"], "2026-11-06", 5, 1, 0, 2),
             ],
         )
         db.commit()
@@ -515,10 +539,10 @@ def test_xlsx_contents_respect_role_scope(app, clock):
     header = summary[3]
     client_index = header.index("Clients engaged")
     alice = next(row for row in summary if row[2] == "alice")
-    assert alice[client_index:client_index + 4] == (10, 2, 1, 4)
+    assert alice[client_index:client_index + 4] == (13, 3, 2, 6)
     total_row = next(row for row in summary if row[1] == "TOTAL")
     assert total_row[3] == 3 and total_row[4] == 3500.0   # 1000 + 500 + 2000
-    assert total_row[client_index:client_index + 4] == (15, 3, 1, 6)
+    assert total_row[client_index:client_index + 4] == (18, 4, 2, 8)
     prns = [row[4] for row in wb["Applications"].iter_rows(min_row=2, values_only=True)]
     assert sorted(prns) == ["2260000000001", "2260000000002", "2260000000003"]
     csv_response = login(app.test_client(), "mgr1").get(
@@ -527,7 +551,7 @@ def test_xlsx_contents_respect_role_scope(app, clock):
     csv_header = csv_rows[1]
     csv_alice = next(row for row in csv_rows if len(row) > 2 and row[2] == "alice")
     csv_client_index = csv_header.index("Clients engaged")
-    assert csv_alice[csv_client_index:csv_client_index + 4] == ["10", "2", "1", "4"]
+    assert csv_alice[csv_client_index:csv_client_index + 4] == ["13", "3", "2", "6"]
 
 
 def test_cannot_download_unfinished_week(app, clock):
@@ -554,7 +578,7 @@ def test_activity_counts_are_saved_and_included_in_personal_report(app):
         uid = get_db().execute("SELECT id FROM users WHERE username='alice'").fetchone()["id"]
     user = login(app.test_client(), "alice")
     dashboard = user.get("/my").data
-    assert dashboard.index(b"Weekly activity") < dashboard.index(
+    assert dashboard.index(b"Daily activity") < dashboard.index(
         b"Bulk import (Excel)")
     page = user.get("/reports/?week=2026-11-09").data
     for field in ("clients_engaged", "radio_talk_shows",
@@ -563,7 +587,7 @@ def test_activity_counts_are_saved_and_included_in_personal_report(app):
     assert b'name="registration_business_names"' not in page
     assert b'name="prn"' not in page
     response = user.post("/reports/activity", data={
-        "week_start": "2026-11-09",
+        "activity_date": "2026-11-10",
         "return_to": "records.mine",
         "clients_engaged": "12",
         "radio_talk_shows": "2",
@@ -572,17 +596,25 @@ def test_activity_counts_are_saved_and_included_in_personal_report(app):
     })
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/my")
+    user.post("/reports/activity", data={
+        "activity_date": "2026-11-11",
+        "return_to": "records.mine",
+        "clients_engaged": "5",
+        "radio_talk_shows": "1",
+        "joint_field_operations": "0",
+        "obrs_accounts_created": "2",
+    })
     with app.app_context():
         saved = get_db().execute(
-            """SELECT week_start, clients_engaged, radio_talk_shows,
+            """SELECT activity_date, clients_engaged, radio_talk_shows,
                       joint_field_operations, obrs_accounts_created
-               FROM weekly_activity WHERE user_id = ?""", (uid,)
+               FROM daily_activity WHERE user_id = ? AND activity_date = '2026-11-10'""", (uid,)
         ).fetchone()
-        assert saved["week_start"] == "2026-11-06"
+        assert saved["activity_date"] == "2026-11-10"
         assert saved["clients_engaged"] == 12
     admin = login(app.test_client(), "admin")
     admin_page = admin.get("/admin/records").data
-    assert admin_page.index(b"Weekly activity") < admin_page.index(
+    assert admin_page.index(b"Daily activity") < admin_page.index(
         b"Bulk import (Excel)")
     assert b'name="user_id"' in admin_page
     report_response = admin.get(
@@ -590,8 +622,45 @@ def test_activity_counts_are_saved_and_included_in_personal_report(app):
     workbook = load_workbook(io.BytesIO(report_response.data))
     assert workbook["TREP Report"]["B13"].value == 2
     assert workbook["TREP Report"]["B22"].value == "-"
-    assert workbook["TREP Report"]["B23"].value == 12
+    assert workbook["TREP Report"]["B23"].value == 17
+    assert workbook["TREP Report"]["B24"].value == 3
+    assert workbook["TREP Report"]["B25"].value == 1
+    assert workbook["TREP Report"]["B26"].value == 5
     assert workbook["TREP Report"]["B27"].value == 2
+
+
+def test_admin_grants_and_revokes_any_day_downloads_for_user(app):
+    seed_week(app)
+    with app.app_context():
+        uid = get_db().execute(
+            "SELECT id FROM users WHERE username='alice'"
+        ).fetchone()["id"]
+
+    alice = login(app.test_client(), "alice")
+    report_url = "/reports/download?week=2026-11-09&fmt=xlsx"
+    assert alice.get(report_url).status_code == 403
+
+    admin = login(app.test_client(), "admin")
+    page = admin.get(f"/reports/?week=2026-11-09&user_id={uid}")
+    assert b"Allow downloads any day" in page.data
+    granted = admin.post(f"/admin/users/{uid}/report-access", data={
+        "action": "grant",
+        "from_date": "2026-11-06",
+        "to_date": "2026-11-12",
+    })
+    assert granted.status_code == 302
+    assert alice.get(report_url).status_code == 200
+    assert alice.get("/reports/download?week=2026-11-02&fmt=xlsx").status_code == 200
+
+    admin.post(f"/admin/users/{uid}/report-access", data={"action": "revoke"})
+    assert alice.get(report_url).status_code == 403
+
+
+def test_non_admin_cannot_grant_any_day_report_downloads(app):
+    response = login(app.test_client(), "mgr1").post(
+        "/admin/users/4/report-access", data={"action": "grant"}
+    )
+    assert response.status_code == 403
 
 
 def test_download_is_logged(app, clock):

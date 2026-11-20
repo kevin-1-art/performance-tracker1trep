@@ -42,6 +42,22 @@ CREATE TABLE IF NOT EXISTS weekly_activity (
     PRIMARY KEY (user_id, week_start)
 );
 
+CREATE TABLE IF NOT EXISTS daily_activity (
+    user_id                  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    activity_date            TEXT    NOT NULL,
+    clients_engaged          INTEGER NOT NULL DEFAULT 0 CHECK (clients_engaged >= 0),
+    radio_talk_shows         INTEGER NOT NULL DEFAULT 0 CHECK (radio_talk_shows >= 0),
+    joint_field_operations   INTEGER NOT NULL DEFAULT 0 CHECK (joint_field_operations >= 0),
+    obrs_accounts_created    INTEGER NOT NULL DEFAULT 0 CHECK (obrs_accounts_created >= 0),
+    PRIMARY KEY (user_id, activity_date)
+);
+
+CREATE TABLE IF NOT EXISTS report_download_access (
+    user_id     INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    granted_by  INTEGER NOT NULL REFERENCES users(id),
+    granted_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS download_log (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id       INTEGER NOT NULL REFERENCES users(id),
@@ -85,6 +101,27 @@ def init_db():
         for column, definition in columns.items():
             if column not in existing:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    activity_fields = (
+        "clients_engaged", "radio_talk_shows",
+        "joint_field_operations", "obrs_accounts_created",
+    )
+    fields = ", ".join(activity_fields)
+    updates = ", ".join(
+        f"{field} = daily_activity.{field} + excluded.{field}"
+        for field in activity_fields
+    )
+    legacy_activity = db.execute(
+        f"SELECT user_id, week_start, {fields} FROM weekly_activity"
+    ).fetchall()
+    for row in legacy_activity:
+        db.execute(
+            f"""INSERT INTO daily_activity (user_id, activity_date, {fields})
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, activity_date) DO UPDATE SET {updates}""",
+            (row["user_id"], row["week_start"], *(row[field] for field in activity_fields)),
+        )
+    db.execute("DELETE FROM weekly_activity")
     db.commit()
 
 

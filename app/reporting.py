@@ -46,10 +46,20 @@ ACTIVITY_ROWS = (
 
 def weekly_activity(db, user_id, week_start):
     fields = [field for field, _label in ACTIVITY_ROWS]
+    week_end = week_start + timedelta(days=6)
     row = db.execute(
-        f"SELECT {', '.join(fields)} FROM weekly_activity "
-        "WHERE user_id = ? AND week_start = ?",
-        (user_id, week_start.isoformat())).fetchone()
+        f"SELECT {', '.join(f'COALESCE(SUM({field}), 0) AS {field}' for field in fields)} "
+        "FROM daily_activity WHERE user_id = ? AND activity_date BETWEEN ? AND ?",
+        (user_id, week_start.isoformat(), week_end.isoformat())).fetchone()
+    return {field: row[field] if row else 0 for field in fields}
+
+
+def daily_activity(db, user_id, activity_date):
+    fields = [field for field, _label in ACTIVITY_ROWS]
+    row = db.execute(
+        f"SELECT {', '.join(fields)} FROM daily_activity "
+        "WHERE user_id = ? AND activity_date = ?",
+        (user_id, activity_date.isoformat())).fetchone()
     return {field: row[field] if row else 0 for field in fields}
 
 
@@ -104,10 +114,10 @@ def build_range_report(db, viewer, start, end):
     if ids:
         sums = ", ".join(f"SUM({field}) AS {field}" for field in activity_fields)
         activity_rows = db.execute(
-            f"""SELECT user_id, {sums} FROM weekly_activity
-                WHERE user_id IN ({_in(ids)}) AND week_start BETWEEN ? AND ?
+            f"""SELECT user_id, {sums} FROM daily_activity
+                WHERE user_id IN ({_in(ids)}) AND activity_date BETWEEN ? AND ?
                 GROUP BY user_id""",
-            (*ids, week_start_of(start).isoformat(), week_start_of(end).isoformat())
+            (*ids, start.isoformat(), end.isoformat())
         ).fetchall()
         activity = {row["user_id"]: row for row in activity_rows}
 

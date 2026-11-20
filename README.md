@@ -19,7 +19,7 @@ Each role gets its own navigation and landing page after login.
 - Individual Excel reports use the TREP layout and include the TREP partner marks and URSB logo in the header, registration totals generated from saved application records, NTR totals from those records, manually entered activity measures, station, and a document-level detail table.
 - Team and overall Excel/CSV summaries include each person's weekly activity measures and totals.
 - The report is **scoped by role**: users get their own, managers their team, admins everyone.
-- **User and manager downloads (Excel `.xlsx` or `.csv`) work only on Thursday**, in the configured timezone (default `Africa/Kampala`). Admins can download any active user's report or the overall report on any day. Reports remain viewable outside the download window; the rule is enforced on the server, not just by hiding a button.
+- **User and manager downloads (Excel `.xlsx` or `.csv`) work only on Thursday**, in the configured timezone (default `Africa/Kampala`), unless an admin grants that account any-day download access. Admins can grant or revoke the all-weeks permission from an individual user's report page. Admins can download any active user's report or the overall report on any day. Reports remain viewable outside the download window; download permissions are enforced on the server.
 - Admins can download an individual report on any day, including the current Friday–Thursday period; an in-progress download includes dates through today. User and manager downloads unlock on Thursday.
 - Every download is logged and shown on the admin overview.
 
@@ -57,7 +57,7 @@ After the deploy completes, copy the service's `onrender.com` URL from the Rende
 1. Log in as admin, open **Users**, create managers.
 2. Create users and assign each a manager and a weekly target.
 3. Set each user’s station in their user profile. Users enter their own records, or import an `.xlsx` workbook using the headers `doc_no, doc_type, entity_name, reg_no, prn, date_of_application, amount`. PRNs must be exactly 13 digits. Admins can also add or import on behalf of any user.
-4. Registration totals are generated from saved application records. Users enter four weekly activity measures from the dashboard, before the Excel bulk-import form, or from the report page. Admins can enter activity on behalf of a selected user. Individual application records still require a 13-digit PRN; existing records can be edited to add document details.
+4. Registration totals are generated from saved application records. Users enter daily values for clients engaged, radio talk shows, joint field operations, and OBRS accounts on the dashboard or report page. Reports sum each day's values for the selected period. Admins can enter daily activity on behalf of a selected user. Existing weekly activity totals are migrated to the first day of their week.
 
 ## Sharing the report automatically
 
@@ -102,6 +102,7 @@ tests/test_app.py       tests for roles, scoping, Thursday gate, Excel import, a
 - Amounts are stored as integer minor units (amount x 100) to avoid floating-point errors.
 - PRNs must contain exactly 13 digits; keep them as text in Excel to preserve any leading zeroes.
 - PRNs are unique across the whole system and must contain exactly 13 digits, so the same PRN cannot be counted twice by different users.
+- The supplied TREP/partner artwork is used as a faint watermark across the app background.
 - Passwords are hashed (Werkzeug), require at least 12 characters for new or changed accounts, and are served through secure, HTTP-only, same-site session cookies in production. All POST requests are CSRF-protected; exports neutralise spreadsheet formula injection.
 - Responses set a restrictive Content Security Policy and other browser security headers, disable caching, and return a generic error page for unexpected server errors. There are no API endpoints or API documentation linked in the UI; routes that handle records require authentication and role checks.
 - Use a unique production `SECRET_KEY`, HTTPS, and a persistent database. This free Render demo still uses ephemeral SQLite storage and is not appropriate for important records.
