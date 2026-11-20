@@ -5,6 +5,7 @@ from flask import (Blueprint, flash, g, redirect, render_template, request,
                    session, url_for, abort)
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from .config import MIN_PASSWORD_LENGTH
 from .db import get_db
 
 bp = Blueprint("auth", __name__)
@@ -76,8 +77,8 @@ def password():
         new = request.form.get("new", "")
         if not check_password_hash(g.user["password_hash"], current):
             flash("Current password is incorrect.", "error")
-        elif len(new) < 8:
-            flash("New password must be at least 8 characters.", "error")
+        elif len(new) < MIN_PASSWORD_LENGTH:
+            flash(f"New password must be at least {MIN_PASSWORD_LENGTH} characters.", "error")
         else:
             db = get_db()
             db.execute("UPDATE users SET password_hash = ? WHERE id = ?",

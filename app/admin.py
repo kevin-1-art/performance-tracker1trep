@@ -5,6 +5,7 @@ from flask import (Blueprint, abort, flash, g, redirect, render_template,
 from werkzeug.security import generate_password_hash
 
 from .auth import roles_required
+from .config import MIN_PASSWORD_LENGTH
 from .db import get_db
 from .reporting import build_report, weekly_activity
 from .utils import last_completed_week_start, to_minor, today, week_start_of
@@ -87,10 +88,10 @@ def _read_user_form(existing=None):
         raise ValueError("Username and full name are required.")
     if role not in ("admin", "manager", "user"):
         raise ValueError("Invalid role.")
-    if existing is None and len(password) < 8:
-        raise ValueError("Password must be at least 8 characters.")
-    if existing is not None and password and len(password) < 8:
-        raise ValueError("Password must be at least 8 characters.")
+    if existing is None and len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+    if existing is not None and password and len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
     target = to_minor(f.get("weekly_target") or "0")
     return dict(username=username, full_name=full_name, role=role, password=password,
                 manager_id=manager_id, is_active=is_active, target=target,

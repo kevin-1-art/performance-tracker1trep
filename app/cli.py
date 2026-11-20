@@ -6,6 +6,7 @@ from datetime import timedelta
 import click
 from werkzeug.security import generate_password_hash
 
+from .config import MIN_PASSWORD_LENGTH
 from .db import get_db, init_db
 from .reporting import (REGISTRATION_TYPES, application_details, build_csv,
                         build_report, build_xlsx)
@@ -56,8 +57,10 @@ def register(app):
     @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
     def create_user(username, full_name, role, password):
         """Create an account (use this for your first admin)."""
-        if len(password) < 8:
-            raise click.ClickException("Password must be at least 8 characters.")
+        if len(password) < MIN_PASSWORD_LENGTH:
+            raise click.ClickException(
+                f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
+            )
         db = get_db()
         db.execute("INSERT INTO users (username, full_name, password_hash, role) VALUES (?,?,?,?)",
                    (username.strip().lower(), full_name, generate_password_hash(password), role))
@@ -67,6 +70,8 @@ def register(app):
     @app.cli.command("seed-demo")
     def seed_demo():
         """Load demo accounts and two weeks of sample applications. DEMO ONLY."""
+        if app.config["APP_ENV"] == "production":
+            raise click.ClickException("Demo data cannot be seeded in production.")
         db = get_db()
         if db.execute("SELECT 1 FROM users LIMIT 1").fetchone():
             raise click.ClickException("Database already has users; refusing to seed.")
@@ -118,7 +123,7 @@ def register(app):
                     (uid, week.isoformat(), rng.randint(1, 20), rng.randint(0, 3),
                      rng.randint(0, 2), rng.randint(0, 10)))
         db.commit()
-        click.echo("Seeded. Log in as admin / manager1 / alice with password 'Password123!'.")
+        click.echo("Seeded demo accounts with the documented demo password.")
 
     @app.cli.command("export-weekly")
     def export_weekly():

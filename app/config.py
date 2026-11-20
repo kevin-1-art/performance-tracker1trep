@@ -1,9 +1,11 @@
 import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MIN_PASSWORD_LENGTH = 12
 
 
 class Config:
+    APP_ENV = os.environ.get("APP_ENV", "development").lower()
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-change-me")
     DATABASE = os.environ.get("DATABASE", os.path.join(BASE_DIR, "instance", "tracker.db"))
     EXPORT_DIR = os.environ.get("EXPORT_DIR", os.path.join(BASE_DIR, "instance", "reports"))
@@ -19,5 +21,7 @@ class Config:
     MAX_CONTENT_LENGTH = 2 * 1024 * 1024  # 2 MB uploads
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
-    # Set SESSION_COOKIE_SECURE=1 when serving over HTTPS.
-    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
+    SESSION_COOKIE_SECURE = (
+        os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
+        or APP_ENV == "production"
+    )

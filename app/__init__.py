@@ -3,7 +3,7 @@ import secrets
 
 from flask import Flask, abort, redirect, render_template, request, session, url_for
 
-from .config import Config
+from .config import Config, MIN_PASSWORD_LENGTH
 from .utils import fmt_money, is_download_day, next_download_date, today
 
 
@@ -12,6 +12,10 @@ def create_app(test_config=None):
     app.config.from_object(Config)
     if test_config:
         app.config.update(test_config)
+    if app.config["APP_ENV"] == "production":
+        if not app.config["SECRET_KEY"] or app.config["SECRET_KEY"] == "dev-only-change-me":
+            raise RuntimeError("Set a unique SECRET_KEY before running in production.")
+        app.config["SESSION_COOKIE_SECURE"] = True
     os.makedirs(os.path.dirname(app.config["DATABASE"]), exist_ok=True)
 
     from . import db
@@ -60,6 +64,7 @@ def create_app(test_config=None):
             "today": today(),
             "registration_types": REGISTRATION_TYPES,
             "activity_rows": ACTIVITY_ROWS,
+            "min_password_length": MIN_PASSWORD_LENGTH,
         }
 
     app.jinja_env.filters["money"] = fmt_money
@@ -72,11 +77,29 @@ def create_app(test_config=None):
         return render_template("error.html", code=e.code, name=e.name,
                                message=getattr(e, "description", "")), e.code
 
+    @app.errorhandler(500)
+    def server_error(_e):
+        return render_template(
+            "error.html", code=500, name="Internal Server Error",
+            message="An unexpected error occurred. Please try again later.",
+        ), 500
+
     @app.after_request
     def security_headers(resp):
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("X-Frame-Options", "DENY")
         resp.headers.setdefault("Referrer-Policy", "same-origin")
+        resp.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; base-uri 'self'; form-action 'self'; "
+            "frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; "
+            "style-src 'self' 'unsafe-inline'; script-src 'self'",
+        )
+        resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        resp.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+        resp.headers["Cache-Control"] = "no-store"
+        if app.config["SESSION_COOKIE_SECURE"]:
+            resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
         return resp
 
     return app

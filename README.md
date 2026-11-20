@@ -40,7 +40,7 @@ flask --app run create-user --role admin
 python run.py          # http://127.0.0.1:5000
 ```
 
-Production: `SECRET_KEY=<long random string> SESSION_COOKIE_SECURE=1 gunicorn "run:app" -b 0.0.0.0:8000` behind HTTPS.
+Production: `APP_ENV=production SECRET_KEY=<long random string> gunicorn "run:app" -b 0.0.0.0:8000` behind HTTPS. Production startup rejects the development secret and forces secure session cookies.
 
 ## Public deployment (Render)
 
@@ -71,12 +71,13 @@ After the deploy completes, copy the service's `onrender.com` URL from the Rende
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `APP_ENV` | `development` | Use `production` to require a non-default secret and secure cookies |
 | `SECRET_KEY` | dev value | **Set this in production** |
 | `DATABASE` | `instance/tracker.db` | SQLite file |
 | `APP_TIMEZONE` | `Africa/Kampala` | Decides what "Thursday" means |
 | `DOWNLOAD_WEEKDAY` | `3` | 0=Mon ... 3=Thu ... 6=Sun |
 | `CURRENCY` | `UGX` | Label only |
-| `SESSION_COOKIE_SECURE` | `0` | Set `1` behind HTTPS |
+| `SESSION_COOKIE_SECURE` | `0` | Set `1` behind HTTPS; always enabled in production |
 
 ## Project layout
 
@@ -101,7 +102,9 @@ tests/test_app.py       tests for roles, scoping, Thursday gate, Excel import, a
 - Amounts are stored as integer minor units (amount x 100) to avoid floating-point errors.
 - PRNs must contain exactly 13 digits; keep them as text in Excel to preserve any leading zeroes.
 - PRNs are unique across the whole system and must contain exactly 13 digits, so the same PRN cannot be counted twice by different users.
-- Passwords are hashed (Werkzeug); all POST requests are CSRF-protected; exports neutralise spreadsheet formula injection.
+- Passwords are hashed (Werkzeug), require at least 12 characters for new or changed accounts, and are served through secure, HTTP-only, same-site session cookies in production. All POST requests are CSRF-protected; exports neutralise spreadsheet formula injection.
+- Responses set a restrictive Content Security Policy and other browser security headers, disable caching, and return a generic error page for unexpected server errors. There are no API endpoints or API documentation linked in the UI; routes that handle records require authentication and role checks.
+- Use a unique production `SECRET_KEY`, HTTPS, and a persistent database. This free Render demo still uses ephemeral SQLite storage and is not appropriate for important records.
 - SQLite is fine for a small team. For heavy concurrent use, move to PostgreSQL.
 - Not included (add if needed): login rate limiting or lockout, password reset by email.
 

@@ -24,8 +24,8 @@
   <label>Weekly target ({{ currency }}) <input name="weekly_target" inputmode="decimal"
          value="{{ request.form.get('weekly_target', ((u.weekly_target_minor / 100) | round(2)) if u else '0') }}"></label>
   <label>Station <input name="station" value="{{ request.form.get('station', u.station if u else '') }}"></label>
-  <label>{{ 'New password (leave blank to keep)' if u else 'Password (min 8 characters)' }}
-    <input type="password" name="password" autocomplete="new-password" {{ '' if u else 'required' }}></label>
+  <label>{{ 'New password (leave blank to keep)' if u else 'Password (min ' ~ min_password_length ~ ' characters)' }}
+    <input type="password" name="password" minlength="{{ min_password_length }}" autocomplete="new-password" {{ '' if u else 'required' }}></label>
   <label class="check"><input type="checkbox" name="is_active" value="1" {{ 'checked' if (not u) or u.is_active }}> Active</label>
   <button class="btn" type="submit">Save</button>
   <a href="{{ url_for('admin.users') }}">Cancel</a>

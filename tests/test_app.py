@@ -180,6 +180,57 @@ def test_csrf_enforced_when_enabled(tmp_path):
     assert r.status_code == 400
 
 
+def test_production_rejects_development_secret(tmp_path):
+    with pytest.raises(RuntimeError, match="unique SECRET_KEY"):
+        create_app({
+            "TESTING": True,
+            "APP_ENV": "production",
+            "SECRET_KEY": "dev-only-change-me",
+            "DATABASE": str(tmp_path / "production.db"),
+        })
+
+
+def test_security_headers_and_production_cookie(tmp_path):
+    app = create_app({
+        "TESTING": True,
+        "APP_ENV": "production",
+        "SECRET_KEY": "a-unique-test-secret",
+        "DATABASE": str(tmp_path / "secure.db"),
+    })
+    response = app.test_client().get("/login")
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "default-src 'self'" in response.headers["Content-Security-Policy"]
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
+    assert "Secure" in response.headers["Set-Cookie"]
+    assert "HttpOnly" in response.headers["Set-Cookie"]
+
+
+def test_unexpected_error_does_not_expose_exception(app):
+    app.config["PROPAGATE_EXCEPTIONS"] = False
+    app.add_url_rule("/test-error", "test_error", lambda: 1 / 0)
+    response = app.test_client().get("/test-error")
+    assert response.status_code == 500
+    assert b"An unexpected error occurred" in response.data
+    assert b"ZeroDivisionError" not in response.data
+
+
+def test_no_api_routes_or_ui_links(app):
+    assert not any(rule.rule.startswith("/api/") for rule in app.url_map.iter_rules())
+    response = app.test_client().get("/login")
+    assert b"/api/" not in response.data
+
+
+def test_tp_favicon_is_linked_and_served(app):
+    client = app.test_client()
+    page = client.get("/login")
+    assert b"/static/favicon.svg" in page.data
+    favicon = client.get("/static/favicon.svg")
+    assert favicon.status_code == 200
+    assert b">TP</text>" in favicon.data
+
+
 # ---------- records ----------
 def test_add_record_and_duplicate_prn(app):
     c = login(app.test_client(), "alice")
@@ -561,7 +612,7 @@ def test_admin_download_any_day(app):
 def test_admin_creates_user_who_can_login(app):
     admin = login(app.test_client(), "admin")
     r = admin.post("/admin/users/new", data={"username": "Newbie", "full_name": "New Bie",
-                                             "password": "LongEnough1", "role": "user",
+                                             "password": "LongEnoughPassword1!", "role": "user",
                                              "weekly_target": "5000", "station": "JINJA",
                                              "is_active": "1"},
                    follow_redirects=True)
@@ -570,7 +621,20 @@ def test_admin_creates_user_who_can_login(app):
         assert get_db().execute(
             "SELECT station FROM users WHERE username='newbie'").fetchone()["station"] == "JINJA"
     c = app.test_client()
-    assert c.post("/login", data={"username": "newbie", "password": "LongEnough1"}).status_code == 302
+    assert c.post(
+        "/login", data={"username": "newbie", "password": "LongEnoughPassword1!"}
+    ).status_code == 302
+
+
+def test_admin_cannot_create_account_with_short_password(app):
+    admin = login(app.test_client(), "admin")
+    response = admin.post("/admin/users/new", data={
+        "username": "weak-password",
+        "full_name": "Weak Password",
+        "password": "Short123!",
+        "role": "user",
+    }, follow_redirects=True)
+    assert b"Password must be at least 12 characters" in response.data
 
 
 def test_admin_cannot_demote_self(app):
