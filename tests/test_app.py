@@ -200,9 +200,114 @@ def test_role_isolation(app):
     alice = login(app.test_client(), "alice")
     assert alice.get("/admin/").status_code == 403
     assert alice.get("/admin/users").status_code == 403
+    assert alice.get("/admin/database").status_code == 403
     assert alice.get("/manager/").status_code == 403
     mgr = login(app.test_client(), "mgr1")
     assert mgr.get("/admin/records").status_code == 403
+
+
+def test_admin_database_lock_blocks_app_and_can_be_reversed(app):
+    admin = login(app.test_client(), "admin")
+    assert admin.get("/admin/database").status_code == 200
+
+    locked = admin.post("/admin/database/toggle", data={"mode": "locked"})
+    assert locked.status_code == 302
+    assert admin.get("/admin/").status_code == 503
+    assert admin.get("/admin/database").status_code == 200
+
+    unlocked = admin.post("/admin/database/toggle", data={"mode": "unlocked"})
+    assert unlocked.status_code == 302
+    assert admin.get("/admin/").status_code == 200
+
+
+def test_admin_database_editor_validates_and_edits_allowlisted_application_rows(app):
+    admin = login(app.test_client(), "admin")
+    with app.app_context():
+        alice_id = get_db().execute(
+            "SELECT id FROM users WHERE username = 'alice'"
+        ).fetchone()["id"]
+
+    invalid = admin.post("/admin/database/applications/new", data={
+        "prn": "123", "date_of_application": "2026-11-18", "amount_minor": "100",
+        "doc_no": "DOC-1", "doc_type": "BUSINESS NAMES", "entity_name": "Test",
+        "reg_no": "REG-1", "user_id": alice_id,
+    })
+    assert invalid.status_code == 200
+    assert b"PRNs must contain exactly 13 digits." in invalid.data
+
+    created = admin.post("/admin/database/applications/new", data={
+        "prn": "1234567890123", "date_of_application": "2026-11-18", "amount_minor": "100",
+        "doc_no": "DOC-1", "doc_type": "BUSINESS NAMES", "entity_name": "Test",
+        "reg_no": "REG-1", "user_id": alice_id,
+    })
+    assert created.status_code == 302
+    with app.app_context():
+        row = get_db().execute(
+            "SELECT id FROM applications WHERE prn = '1234567890123'"
+        ).fetchone()
+        row_id = row["id"]
+
+    listing = admin.get("/admin/database/applications")
+    assert listing.status_code == 200
+    assert b"1234567890123" in listing.data
+    users_listing = admin.get("/admin/database/users")
+    assert users_listing.status_code == 200
+    assert b"password_hash" not in users_listing.data
+    assert admin.get("/admin/database/not-a-table").status_code == 404
+    assert admin.get("/admin/database/download_log/new").status_code == 403
+
+    updated = admin.post(
+        f"/admin/database/applications/edit?id={row_id}",
+        data={
+            "original_id": row_id, "prn": "1234567890123", "date_of_application": "2026-11-18",
+            "amount_minor": "100", "doc_no": "DOC-2", "doc_type": "BUSINESS NAMES",
+            "entity_name": "Updated", "reg_no": "REG-1", "user_id": alice_id,
+        },
+    )
+    assert updated.status_code == 302
+    with app.app_context():
+        assert get_db().execute(
+            "SELECT doc_no FROM applications WHERE id = ?", (row_id,)
+        ).fetchone()["doc_no"] == "DOC-2"
+
+    deleted = admin.post(
+        "/admin/database/applications/delete",
+        data={"id": row_id, "confirm_delete": "DELETE"},
+    )
+    assert deleted.status_code == 302
+    with app.app_context():
+        assert get_db().execute(
+            "SELECT id FROM applications WHERE id = ?", (row_id,)
+        ).fetchone() is None
+
+
+def test_admin_database_editor_can_update_composite_activity_key(app):
+    admin = login(app.test_client(), "admin")
+    with app.app_context():
+        alice_id = get_db().execute(
+            "SELECT id FROM users WHERE username = 'alice'"
+        ).fetchone()["id"]
+
+    created = admin.post("/admin/database/daily_activity/new", data={
+        "user_id": alice_id, "activity_date": "2026-11-18", "clients_engaged": "2",
+        "radio_talk_shows": "1", "joint_field_operations": "0", "obrs_accounts_created": "3",
+    })
+    assert created.status_code == 302
+    updated = admin.post(
+        f"/admin/database/daily_activity/edit?user_id={alice_id}&activity_date=2026-11-18",
+        data={
+            "original_user_id": alice_id, "original_activity_date": "2026-11-18",
+            "user_id": alice_id, "activity_date": "2026-11-19", "clients_engaged": "2",
+            "radio_talk_shows": "1", "joint_field_operations": "0",
+            "obrs_accounts_created": "3",
+        },
+    )
+    assert updated.status_code == 302
+    with app.app_context():
+        assert get_db().execute(
+            "SELECT 1 FROM daily_activity WHERE user_id = ? AND activity_date = '2026-11-19'",
+            (alice_id,),
+        ).fetchone()
 
 
 def test_csrf_enforced_when_enabled(tmp_path):

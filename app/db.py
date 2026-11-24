@@ -71,6 +71,11 @@ CREATE TABLE IF NOT EXISTS download_log (
     format        TEXT    NOT NULL,
     downloaded_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 
@@ -122,6 +127,9 @@ class _PostgresDatabase:
     def commit(self):
         self._connection.commit()
 
+    def rollback(self):
+        self._connection.rollback()
+
     def close(self):
         self._connection.close()
 
@@ -161,6 +169,15 @@ def close_db(_exc=None):
     db = g.pop("db", None)
     if db is not None:
         db.close()
+
+
+def database_lock_enabled(db=None):
+    db = db or get_db()
+    row = db.execute(
+        "SELECT value FROM app_settings WHERE key = ?",
+        ("database_locked",),
+    ).fetchone()
+    return bool(row and row["value"] == "1")
 
 
 def init_db():

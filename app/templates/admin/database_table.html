@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ config.label }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('admin.database') }}">← Database controls</a></p>
+<h1>{{ config.label }}</h1>
+{% if config.form_fields is not none %}
+  <p><a class="btn" href="{{ url_for('admin.database_new', table=table) }}">Add row</a></p>
+{% else %}
+  <p class="muted">This table is read-only.</p>
+{% endif %}
+<div class="table-wrap">
+  <table>
+    <thead><tr>{% for field in config.fields %}<th>{{ field.replace('_', ' ') }}</th>{% endfor %}
+      {% if config.form_fields is not none %}<th>Actions</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for entry in rows %}
+      <tr>
+        {% for field in config.fields %}<td>{{ entry.row[field] }}</td>{% endfor %}
+        {% if config.form_fields is not none %}
+          <td><a href="{{ entry.edit_url }}">Edit</a></td>
+        {% endif %}
+      </tr>
+    {% else %}
+      <tr><td colspan="{{ config.fields|length + (1 if config.form_fields is not none else 0) }}" class="muted">No rows.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p>
+  {% if page > 1 %}
+    <a href="{{ url_for('admin.database_table', table=table, page=page-1) }}">← Previous</a>
+  {% endif %}
+  {% if has_next %}
+    <a href="{{ url_for('admin.database_table', table=table, page=page+1) }}">Next →</a>
+  {% endif %}
+</p>
+{% endblock %}

@@ -59,6 +59,12 @@ After the deploy completes, copy the service's `onrender.com` URL from the Rende
 3. Set each user’s station in their user profile. Users enter their own records, or import an `.xlsx` workbook using the headers `doc_no, doc_type, entity_name, reg_no, prn, date_of_application, amount`. PRNs must be exactly 13 digits. Admins can also add or import on behalf of any user.
 4. Registration totals are generated from saved application records. Users enter daily values for clients engaged, radio talk shows, joint field operations, and OBRS accounts on the dashboard or report page. Reports sum each day's values for the selected period. Admins can enter daily activity on behalf of a selected user. Existing weekly activity totals are migrated to the first day of their week.
 
+## Admin database controls
+
+Admins can open **Database** to pause or resume normal application access and browse approved tables. Pausing access blocks normal app pages with a service-unavailable response; login, static assets, and the admin database tools remain available so an administrator can unlock the app. This is an application-level pause only: it does not stop or disconnect the Render PostgreSQL service, and the controlled admin editor remains available while paused.
+
+The table editor supports application records, user accounts, daily and legacy weekly activity, and report download access. It validates form inputs, hides password hashes, and requires typing `DELETE` before removing a row. Download audit history is read-only. Arbitrary SQL and unlisted tables are not exposed.
+
 ## Sharing the report automatically
 
 `flask --app run export-weekly` writes last week's company-wide `.xlsx` and `.csv` to `instance/reports/`. Schedule it with cron (for example every Thursday at 07:00) and email or sync the files however you like:

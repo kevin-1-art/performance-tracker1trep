@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if row else 'Add' }} {{ config.label }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('admin.database_table', table=table) }}">← {{ config.label }}</a></p>
+<h1>{{ 'Edit' if row else 'Add' }} {{ config.label }}</h1>
+{% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+<form method="post" class="card narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if row %}
+    {% for key in config.keys %}
+      <input type="hidden" name="original_{{ key }}" value="{{ row[key] }}">
+    {% endfor %}
+  {% endif %}
+  {% for field, kind in config.form_fields.items() %}
+    {% if kind == 'checkbox' %}
+      {% set checked = request.form.get(field) == '1' if request.method == 'POST' else (row[field] if row else 1) %}
+      <label class="check">
+        <input type="checkbox" name="{{ field }}" value="1" {{ 'checked' if checked }}> Active
+      </label>
+    {% elif kind == 'role' %}
+      <label>Role
+        <select name="{{ field }}">
+          {% set selected = request.form.get(field, row[field] if row else 'user') %}
+          {% for role in ['user', 'manager', 'admin'] %}
+            <option value="{{ role }}" {{ 'selected' if selected == role }}>{{ role }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    {% else %}
+      {% set value = request.form.get(field, row[field] if row and field in row else '') %}
+      {% if kind == 'password' and row %}
+        {% set label = 'New password (leave blank to keep current)' %}
+      {% elif field == 'amount_minor' %}
+        {% set label = 'Amount (minor units; 100 = 1 currency unit)' %}
+      {% elif field == 'weekly_target_minor' %}
+        {% set label = 'Weekly target (minor units; 100 = 1 currency unit)' %}
+      {% else %}
+        {% set label = field.replace('_', ' ')|title %}
+      {% endif %}
+      <label>{{ label }}
+        <input name="{{ field }}" type="{{ kind if kind in ['date', 'number', 'password'] else 'text' }}"
+          value="{{ '' if kind == 'password' else value }}"
+          {% if kind == 'password' %}autocomplete="new-password" minlength="{{ min_password_length }}"{% endif %}
+          {% if kind == 'password' and not row %}required{% endif %}
+          {% if kind != 'password' and field not in ['doc_no', 'doc_type', 'entity_name', 'reg_no', 'station', 'manager_id'] %}required{% endif %}>
+      </label>
+    {% endif %}
+  {% endfor %}
+  <button class="btn" type="submit">Save row</button>
+</form>
+{% if row %}
+  <form method="post" action="{{ url_for('admin.database_delete', table=table) }}" class="card narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% for key in config.keys %}
+      <input type="hidden" name="{{ key }}" value="{{ row[key] }}">
+    {% endfor %}
+    <label>Type DELETE to permanently remove this row
+      <input name="confirm_delete" autocomplete="off" required>
+    </label>
+    <button class="btn secondary" type="submit">Delete row</button>
+  </form>
+{% endif %}
+{% endblock %}

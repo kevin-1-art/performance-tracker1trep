@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Database controls{% endblock %}
+{% block content %}
+<h1>Database controls</h1>
+<div class="card">
+  <h2>Application access</h2>
+  {% if locked %}
+    <p class="flash error">Application access is paused. Admin database tools remain available.</p>
+    <p>This switch does not stop or disconnect the Render PostgreSQL service.</p>
+    <form method="post" action="{{ url_for('admin.database_toggle') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="mode" value="unlocked">
+      <button class="btn" type="submit">Enable application access</button>
+    </form>
+  {% else %}
+    <p>Application database access is enabled.</p>
+    <p>Pausing access blocks normal app pages and writes. This admin page and its table editor remain available.</p>
+    <form method="post" action="{{ url_for('admin.database_toggle') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="mode" value="locked">
+      <button class="btn secondary" type="submit">Pause application access</button>
+    </form>
+  {% endif %}
+</div>
+<h2>Table browser</h2>
+<p class="muted">Rows are paginated. Password hashes and raw SQL are not exposed. Deletion requires explicit confirmation.</p>
+<div class="card">
+  <ul>
+  {% for name, config in tables.items() %}
+    <li><a href="{{ url_for('admin.database_table', table=name) }}">{{ config.label }}</a></li>
+  {% endfor %}
+  </ul>
+</div>
+{% endblock %}

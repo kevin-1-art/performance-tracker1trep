@@ -57,6 +57,19 @@ def create_app(test_config=None):
             if not token or not sent or not secrets.compare_digest(token, sent):
                 abort(400, "Invalid or missing CSRF token. Reload the page and try again.")
 
+    @app.before_request
+    def enforce_database_lock():
+        from .db import database_lock_enabled, get_db
+
+        if not database_lock_enabled(get_db()):
+            return
+        endpoint = request.endpoint or ""
+        if endpoint in ("auth.login", "auth.logout", "static") or endpoint.startswith(
+            "admin.database"
+        ):
+            return
+        abort(503, "Database access is paused by an administrator.")
+
     @app.context_processor
     def inject_globals():
         from .reporting import ACTIVITY_ROWS, REGISTRATION_TYPES
@@ -80,6 +93,7 @@ def create_app(test_config=None):
     @app.errorhandler(400)
     @app.errorhandler(403)
     @app.errorhandler(404)
+    @app.errorhandler(503)
     def http_error(e):
         return render_template("error.html", code=e.code, name=e.name,
                                message=getattr(e, "description", "")), e.code
