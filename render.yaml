@@ -16,6 +16,8 @@ services:
         value: Africa/Kampala
       - key: SESSION_COOKIE_SECURE
         value: "1"
+      - key: DATABASE_URL
+        sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: INITIAL_ADMIN_USERNAME

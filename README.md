@@ -44,11 +44,11 @@ Production: `APP_ENV=production SECRET_KEY=<long random string> gunicorn "run:ap
 
 ## Public deployment (Render)
 
-The repository includes a Render Blueprint for a free web service with a generated `SECRET_KEY`. The free service uses an ephemeral filesystem: SQLite data is lost whenever Render spins the service down after inactivity, restarts it, or redeploys it. Free instances can also take about a minute to wake and have limited monthly usage. This is for demos only; do not enter real or important records. Free web services do not provide Shell access.
+The repository includes a Render Blueprint for a free web service with a generated `SECRET_KEY`. For persistent data, connect a Render PostgreSQL database by setting `DATABASE_URL` to its **Internal Database URL** in the web service's environment settings (use the external URL only when connecting from outside Render). Keep the URL private. If `DATABASE_URL` is unset, the app falls back to local SQLite; on Render that SQLite file is on an ephemeral filesystem and is lost when the service spins down, restarts, or redeploys. Free services can also take about a minute to wake and have limited monthly usage. Free web services do not provide Shell access.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/kevin-1-art/performance-tracker1trep)
 
-During Blueprint setup, provide values for `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_FULL_NAME`, and `INITIAL_ADMIN_PASSWORD` in Render's environment settings. Use a unique password of at least 12 characters; never put credentials in the repository. The service creates that admin account when its database is empty, including after a free-tier restart clears the database.
+During Blueprint setup, provide `DATABASE_URL` (if using PostgreSQL), `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_FULL_NAME`, and `INITIAL_ADMIN_PASSWORD` in Render's environment settings. Use a unique password of at least 12 characters; never put credentials in the repository. The service creates the initial admin account when the connected database has no users. Existing SQLite records are not copied automatically; migrate them separately before switching production traffic.
 
 After the deploy completes, copy the service's `onrender.com` URL from the Render dashboard and share it. The login page is public, but application records require authentication.
 
@@ -73,7 +73,8 @@ After the deploy completes, copy the service's `onrender.com` URL from the Rende
 |---|---|---|
 | `APP_ENV` | `development` | Use `production` to require a non-default secret and secure cookies |
 | `SECRET_KEY` | dev value | **Set this in production** |
-| `DATABASE` | `instance/tracker.db` | SQLite file |
+| `DATABASE_URL` | unset | PostgreSQL connection URL; when set, PostgreSQL is used instead of SQLite |
+| `DATABASE` | `instance/tracker.db` | SQLite file used when `DATABASE_URL` is unset |
 | `APP_TIMEZONE` | `Africa/Kampala` | Decides what "Thursday" means |
 | `DOWNLOAD_WEEKDAY` | `3` | 0=Mon ... 3=Thu ... 6=Sun |
 | `CURRENCY` | `UGX` | Label only |

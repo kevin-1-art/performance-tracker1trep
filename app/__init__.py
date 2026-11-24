@@ -12,11 +12,18 @@ def create_app(test_config=None):
     app.config.from_object(Config)
     if test_config:
         app.config.update(test_config)
+        if "DATABASE" in test_config and "DATABASE_URL" not in test_config:
+            app.config["DATABASE_URL"] = None
     if app.config["APP_ENV"] == "production":
         if not app.config["SECRET_KEY"] or app.config["SECRET_KEY"] == "dev-only-change-me":
             raise RuntimeError("Set a unique SECRET_KEY before running in production.")
         app.config["SESSION_COOKIE_SECURE"] = True
-    os.makedirs(os.path.dirname(app.config["DATABASE"]), exist_ok=True)
+    if not app.config.get("DATABASE_URL") and not app.config["DATABASE"].startswith(
+        ("postgres://", "postgresql://")
+    ):
+        database_dir = os.path.dirname(app.config["DATABASE"])
+        if database_dir:
+            os.makedirs(database_dir, exist_ok=True)
 
     from . import db
     db.init_app(app)

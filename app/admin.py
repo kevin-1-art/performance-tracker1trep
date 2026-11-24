@@ -1,12 +1,10 @@
-import sqlite3
-
 from flask import (Blueprint, abort, flash, g, redirect, render_template,
                    request, url_for)
 from werkzeug.security import generate_password_hash
 
 from .auth import roles_required
 from .config import MIN_PASSWORD_LENGTH
-from .db import get_db
+from .db import INTEGRITY_ERRORS, get_db
 from .reporting import build_report, daily_activity
 from .utils import last_completed_week_start, to_minor, today, week_start_of
 
@@ -118,7 +116,7 @@ def user_new():
             return redirect(url_for("admin.users"))
         except ValueError as e:
             flash(str(e), "error")
-        except sqlite3.IntegrityError:
+        except INTEGRITY_ERRORS:
             flash("That username is already taken.", "error")
     return render_template("admin/user_form.html", u=None, managers=_managers(db))
 
@@ -148,7 +146,7 @@ def user_edit(uid):
             return redirect(url_for("admin.users"))
         except ValueError as e:
             flash(str(e), "error")
-        except sqlite3.IntegrityError:
+        except INTEGRITY_ERRORS:
             flash("That username is already taken.", "error")
     return render_template("admin/user_form.html", u=u, managers=_managers(db))
 

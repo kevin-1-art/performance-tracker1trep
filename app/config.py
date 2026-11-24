@@ -7,6 +7,7 @@ MIN_PASSWORD_LENGTH = 12
 class Config:
     APP_ENV = os.environ.get("APP_ENV", "development").lower()
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-change-me")
+    DATABASE_URL = os.environ.get("DATABASE_URL")
     DATABASE = os.environ.get("DATABASE", os.path.join(BASE_DIR, "instance", "tracker.db"))
     EXPORT_DIR = os.environ.get("EXPORT_DIR", os.path.join(BASE_DIR, "instance", "reports"))
 
