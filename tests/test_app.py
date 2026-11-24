@@ -9,7 +9,7 @@ from openpyxl import Workbook, load_workbook
 from werkzeug.security import generate_password_hash
 
 from app import create_app
-from app.db import _postgres_query, get_db
+from app.db import _PostgresCursor, _postgres_query, get_db
 
 TZ = ZoneInfo("Africa/Kampala")
 WED = datetime(2026, 11, 18, 12, 0, tzinfo=TZ)   # Wednesday
@@ -22,6 +22,20 @@ def test_postgres_query_translates_sqlite_placeholders_and_timestamps():
     assert _postgres_query(query) == (
         "INSERT INTO users (username, created_at) VALUES (%s, CURRENT_TIMESTAMP::text)"
     )
+
+
+def test_postgres_cursor_supports_iteration():
+    class Cursor:
+        def __init__(self):
+            self.rows = iter(({"name": "station"}, {"name": "created_at"}))
+            self.rowcount = -1
+
+        def fetchone(self):
+            return next(self.rows, None)
+
+    cursor = _PostgresCursor(Cursor())
+
+    assert [row["name"] for row in cursor] == ["station", "created_at"]
 
 
 @pytest.fixture

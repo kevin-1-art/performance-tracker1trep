@@ -86,6 +86,13 @@ class _PostgresCursor:
         self.lastrowid = buffered_row["id"] if buffered_row is not None else None
         self.rowcount = cursor.rowcount
 
+    def __iter__(self):
+        while True:
+            row = self.fetchone()
+            if row is None:
+                return
+            yield row
+
     def fetchone(self):
         if self._buffered_row is not None:
             row, self._buffered_row = self._buffered_row, None
